@@ -1,0 +1,12 @@
+__pycache__/
+build/
+dist/
+repository/
+temp/
+database.db
+*.spec
+*.zip
+*.pdf
+*.png
+*.ico
+*.log
