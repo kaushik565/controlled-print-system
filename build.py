@@ -16,7 +16,10 @@ def build():
     add_data_logo_white = "molbio_logo_white.png;."
     add_data_bg = "dna_bg.png;."
     
-    app_name = "CDPS"
+    add_data_assets = "assets;assets/"
+    add_data_icon = "app_icon.ico;."
+    
+    app_name = "Controlled Print System Portable"
     script_path = "app.py"
     icon_path = "app_icon.ico"
     
@@ -24,14 +27,17 @@ def build():
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
-        "--onedir",          # Create a directory rather than a single massive .exe (faster startup)
+        "--onefile",         # Create a single portable .exe file
         "--windowed",        # Do not open a console window
+        "--version-file", "version_info.txt",
         "--name", app_name,
         "--icon", icon_path,
         "--add-data", add_data_str,
         "--add-data", add_data_logo,
         "--add-data", add_data_logo_white,
         "--add-data", add_data_bg,
+        "--add-data", add_data_assets,
+        "--add-data", add_data_icon,
         script_path
     ]
     

@@ -15,11 +15,12 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.colors import Color
 from reportlab.lib.pagesizes import A4
 from PIL import Image
-
+import urllib.request
+from qa_rejections import QARejectionsPane
 # ==========================================
 # SETTINGS
 # ==========================================
-APP_VERSION = "2.5.0"
+APP_VERSION = "3.0.0"
 
 ctk.set_appearance_mode("Light")
 ctk.set_default_color_theme("blue")
@@ -83,7 +84,7 @@ STAGE_OPTIONS = ["VI-1", "VI-2", "VI-3", "VACCUM REJECTIONS", "VI-4", "CHILD PAR
 class ControlledPrintSystem(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Controlled Document Printing System - v2.5.0")
+        self.title(f"Controlled Document Printing System - v{APP_VERSION}")
         self.geometry("1300x750")
         self.configure(fg_color=BG_COLOR)
         
@@ -94,7 +95,71 @@ class ControlledPrintSystem(ctk.CTk):
         if os.path.exists(icon_path):
             self.iconbitmap(icon_path)
         
-        self.build_login_screen()
+        self.check_license_sync()
+
+    def get_machine_id(self):
+        import uuid
+        import platform
+        mac = str(uuid.getnode())
+        pc = platform.node()
+        return f"{pc}-{mac}"
+        
+    def check_license_sync(self):
+        import getpass
+        
+        self.machine_id = self.get_machine_id()
+        self.username = getpass.getuser()
+        
+        url = "https://script.google.com/macros/s/AKfycbzJAtz2MktkFtBL1EKO2kWWXANvSNCTEkvSLHPVieR_qDTylxrtN1zT6tlorSrTVwF48w/exec"
+        payload = {
+            "action": "checkLicense",
+            "machineId": self.machine_id,
+            "username": self.username
+        }
+        
+        try:
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
+            with urllib.request.urlopen(req, timeout=10) as response:
+                res_data = json.loads(response.read().decode())
+                if res_data.get("status") == "active":
+                    self.build_login_screen()
+                else:
+                    self.build_blocked_screen()
+        except Exception as e:
+            print("License check failed:", e)
+            self.build_blocked_screen(offline=True)
+
+    def build_blocked_screen(self, offline=False):
+        self.blocked_frame = ctk.CTkFrame(self, fg_color=BG_COLOR)
+        self.blocked_frame.pack(fill="both", expand=True)
+        
+        card = ctk.CTkFrame(self.blocked_frame, width=650, height=450, corner_radius=15, fg_color=CARD_BG, border_width=1, border_color=STATUS_RED_FG)
+        card.place(relx=0.5, rely=0.5, anchor="center")
+        
+        title = "Official Permission Required" if not offline else "Connection Error"
+        
+        msg = (
+            "Dear QA Team,\n\n"
+            "This software was developed by Kaushik, and all rights are reserved by me.\n"
+            "If you wish to use this software, please obtain official permission from the QA Head.\n"
+            "Once the approval is received, I will make the software available for official use.\n\n"
+            "Note: The free service/support period has been completed.\n\n"
+            "Regards,\n"
+            "Kaushik\n\n"
+            f"(Machine ID: {getattr(self, 'machine_id', 'UNKNOWN')})"
+        )
+        
+        if offline:
+            msg = "Could not connect to the licensing server.\nPlease check your internet connection and try again."
+            
+        lbl_title = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=20, weight="bold"), text_color=STATUS_RED_FG)
+        lbl_title.pack(pady=(40, 10))
+        
+        lbl_msg = ctk.CTkLabel(card, text=msg, font=ctk.CTkFont(size=14), text_color=TEXT_PRIMARY, justify="center")
+        lbl_msg.pack(padx=30, pady=20)
+        
+        btn = ctk.CTkButton(card, text="Retry Connection", command=lambda: [self.blocked_frame.destroy(), self.check_license_sync()])
+        btn.pack(pady=20)
 
     def build_login_screen(self):
         self.login_frame = ctk.CTkFrame(self, fg_color=BG_COLOR)
@@ -437,6 +502,12 @@ class ControlledPrintSystem(ctk.CTk):
         self.build_main_pane(self.frames["🖨️ Batch Print"])
         self.build_preview_pane(self.frames["🖨️ Batch Print"])
         
+        # Build QA Rejections Frame
+        self.frames["📊 QA Rejections"] = ctk.CTkFrame(self.pages_container, fg_color="transparent")
+        self.frames["📊 QA Rejections"].grid_rowconfigure(0, weight=1)
+        self.frames["📊 QA Rejections"].grid_columnconfigure(0, weight=1)
+        self.build_qa_rejections_pane(self.frames["📊 QA Rejections"])
+        
         # Build Document Repository Frame
         self.frames["📄 Document Repository"] = ctk.CTkFrame(self.pages_container, fg_color="transparent")
         self.frames["📄 Document Repository"].grid_rowconfigure(0, weight=1)
@@ -530,6 +601,7 @@ class ControlledPrintSystem(ctk.CTk):
             ("📄 Document Repository", False),
             ("🖨️ Batch Print", True), # Active
             ("🕒 Print History", False),
+            ("📊 QA Rejections", False),
             ("📋 Audit Log", False),
             ("⚠️ Error Log", False),
             ("⚙️ Settings", False),
@@ -1104,6 +1176,10 @@ class ControlledPrintSystem(ctk.CTk):
                 except Exception as e:
                     print(f"Error deleting temp file {file_path}: {e}")
 
+    def build_qa_rejections_pane(self, parent):
+        pane = QARejectionsPane(parent, self)
+        pane.grid(row=0, column=0, sticky="nsew")
+
     def build_print_history_pane(self, parent):
         main_frame = ctk.CTkFrame(parent, fg_color=BG_COLOR, corner_radius=0)
         main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
@@ -1598,6 +1674,25 @@ class ControlledPrintSystem(ctk.CTk):
         self.show_status_msg("All data and previews cleared", duration=2000)
 
     def process_log(self):
+        import urllib.request
+        import json
+        url = "https://script.google.com/macros/s/AKfycbzJAtz2MktkFtBL1EKO2kWWXANvSNCTEkvSLHPVieR_qDTylxrtN1zT6tlorSrTVwF48w/exec"
+        payload = {"action": "checkLicense", "machineId": getattr(self, 'machine_id', 'UNKNOWN'), "username": getattr(self, 'username', 'UNKNOWN')}
+        try:
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
+            with urllib.request.urlopen(req, timeout=5) as response:
+                res_data = json.loads(response.read().decode())
+                if res_data.get("status") != "active":
+                    for widget in self.winfo_children():
+                        widget.destroy()
+                    self.build_blocked_screen()
+                    return
+        except Exception:
+            for widget in self.winfo_children():
+                widget.destroy()
+            self.build_blocked_screen(offline=True)
+            return
+
         raw_data = self.log_text.get("1.0", "end").strip()
         if not raw_data: return
         reader = csv.reader(io.StringIO(raw_data), dialect='excel-tab')
